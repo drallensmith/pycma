@@ -29,7 +29,7 @@ This code has two **purposes**:
    better termination options, boundary and noise handling, injection,
    automated restarts...
 
-Dependencies: `math.exp`, `math.log` and `random.normalvariate` (modules
+Dependencies: `math.exp`, `math.log`, `math.fsum`, and `random.normalvariate` (modules
 `matplotlib.pylab` and `sys` are optional).
 
 Testing: call ``python purecma.py`` at the OS shell. Tested with
@@ -49,7 +49,7 @@ from __future__ import division  # such that 1/2 != 0
 from __future__ import print_function  # available since 2.6, not needed
 
 from sys import stdout as _stdout # not strictly necessary
-from math import log, exp
+from math import log, exp, fsum
 from random import normalvariate as random_normalvariate
 
 try:
@@ -60,6 +60,7 @@ try:
     from .recombination_weights import RecombinationWeights
 except (ImportError, ValueError):
     RecombinationWeights = None
+# XXX What is the below line doing?
 del division, print_function  #, absolute_import, unicode_literals, with_statement
 
 __version__ = '3.0.0'
@@ -204,7 +205,7 @@ class CMAESParameters(object):
         else:  # set non-negative recombination weights "manually"
             _weights = [log(self.mu+0.5) - log(i+1) if i < self.mu else 0
                         for i in range(self.lam)]
-            w_sum = sum(_weights[:self.mu])
+            w_sum = fsum(_weights[:self.mu])
             self.weights = [w / w_sum for w in _weights]  # sum is one now
             self.mueff = sum(self.weights[:self.mu])**2 / \
                          sum(w**2 for w in self.weights[:self.mu])  # variance-effectiveness of sum w_i x_i
@@ -280,7 +281,7 @@ class CMAES(OOOptimizer):  # could also inherit from object
         print('best solution =', es.result[0])
 
         print('potentially better solution xmean =', es.result[5])
-        print("let\'s check f(xmean) = ", pcma.ff.elli(es.result[5]))
+        print('check f(xmean) = ', pcma.ff.elli(es.result[5]))
         es.logger.plot()  # if matplotlib is available
 
     A very similar example which may also save the logged data within
@@ -400,14 +401,14 @@ class CMAES(OOOptimizer):  # could also inherit from object
             self.ps[i] = (1 - par.cs) * self.ps[i] + csn * z[i]
         ccn = (par.cc * (2 - par.cc) * par.mueff)**0.5 / self.sigma
         ### turn off rank-one accumulation when sigma increases quickly
-        # squared_ps_len = sum(x**2 for x in self.ps)
-        # adjusted_squared_ps_len = squared_ps_len / (1-(1-par.cs)**(2*self.counteval/par.lam))
+        sum_square_ps = sum(x**2 for x in self.ps)
+        # adjusted_squared_ps_len = sum_square_ps / (1-(1-par.cs)**(2*self.counteval/par.lam))
         # adjusted_squared_ps_len /= N
         # if adjusted_squared_ps_len < (2 + (4.0/(N+1))):
         #     hsig = 1
         # else:
         #     hsig = 0
-        hsig = (sum(x**2 for x in self.ps)  # squared length of ps
+        hsig = (sum_square_ps  # squared length of ps
                 / (1-(1-par.cs)**(2*self.counteval/par.lam)) / N
                 < 2 + 4./(N+1))
         for i in range(N):  # update evolution path pc
@@ -425,7 +426,7 @@ class CMAES(OOOptimizer):  # could also inherit from object
                             wk * par.cmu / self.sigma**2)
 
         ### Adapt step-size sigma
-        cn, sum_square_ps = par.cs / par.damps, sum(x**2 for x in self.ps)
+        cn = par.cs / par.damps
         self.sigma *= exp(min(1, cn * (sum_square_ps / N - 1) / 2))
         # self.sigma *= exp(min(1, cn * (sum_square_ps**0.5 / par.chiN - 1)))
 
@@ -805,26 +806,34 @@ class DecomposingPositiveMatrix(SquareMatrix):
             return self
         self._enforce_symmetry()  # probably not necessary with eig
         self.eigenvalues, self.eigenbasis = eig(self)  # O(N**3)
-        if min(self.eigenvalues) <= 0:
+        min_eigenvalue = min(self.eigenvalues)
+        if min_eigenvalue <= 0:
             raise RuntimeError(
                 "The smallest eigenvalue is <= 0 after %d evaluations!"
                 "\neigenvectors:\n%s \neigenvalues:\n%s"
                 % (current_eval, str(self.eigenbasis), str(self.eigenvalues)))
-        self.condition_number = max(self.eigenvalues) / min(self.eigenvalues)
+        self.condition_number = max(self.eigenvalues) / min_eigenvalue
         # now compute invsqrt(C) = C**(-1/2) = B D**(-1/2) B'
         # this is O(n^3) and takes about 25% of the time of eig
-        for i in range(len(self)):
-            for j in range(i+1):
-                self.invsqrt[i][j] = self.invsqrt[j][i] = sum(
-                    self.eigenbasis[i][k] * self.eigenbasis[j][k]
-                    / self.eigenvalues[k]**0.5 for k in range(len(self)))
+        if (self.condition_number > 1e7) or (min_eigenvalue < 1e-11):
+            for i in range(len(self)):
+                for j in range(i+1):
+                    self.invsqrt[i][j] = self.invsqrt[j][i] = fsum(
+                        self.eigenbasis[i][k] * self.eigenbasis[j][k]
+                        / self.eigenvalues[k]**0.5 for k in range(len(self)))
+        else:
+            for i in range(len(self)):
+                for j in range(i+1):
+                    self.invsqrt[i][j] = self.invsqrt[j][i] = sum(
+                        self.eigenbasis[i][k] * self.eigenbasis[j][k]
+                        / self.eigenvalues[k]**0.5 for k in range(len(self)))
         self.updated_eval = current_eval
         return self
 
     def mahalanobis_norm(self, dx):
         """return ``(dx^T * C^-1 * dx)**0.5``
         """
-        return sum(xi**2 for xi in dot(self.invsqrt, dx))**0.5
+        return fsum(xi**2 for xi in dot(self.invsqrt, dx))**0.5
 
     def _enforce_symmetry(self):
         for i in range(len(self)):
@@ -847,10 +856,10 @@ def dot(A, b, transpose=False):
     is used.
     """
     if not transpose:
-        return [sum(A[i][j] * b[j] for j in range(len(b)))
+        return [fsum(A[i][j] * b[j] for j in range(len(b)))
                 for i in range(len(A))]
     else:
-        return [sum(A[j][i] * b[j] for j in range(len(b)))
+        return [fsum(A[j][i] * b[j] for j in range(len(b)))
                 for i in range(len(A[0]))]
 
 def plus(a, b):
@@ -939,7 +948,7 @@ def eig(C):
     # Computes the eigensystem from a tridiagonal matrix in roughtly 3N^3
     #    operations
     # -> n     : Dimension.
-    # -> d     : Diagonale of tridiagonal matrix.
+    # -> d     : Diagonal of tridiagonal matrix.
     # -> e[1..n-1] : off-diagonal, output from Householder
     # -> V     : matrix output von Householder
     # <- d     : eigenvalues
@@ -978,11 +987,9 @@ def eig(C):
             # Scale to avoid under/overflow.
             h = 0.0
             if not num_opt:
-                scale = 0.0
-                for k in range(i):
-                    scale = scale + abs(d[k])
+                scale = fsum([abs(d[k]) for k in range(i)])
             else:
-                scale = sum(np.abs(d[0:i]))
+                scale = fsum(np.abs(d[0:i]))
 
             if scale == 0.0:
                 e[i] = d[i-1]
@@ -994,9 +1001,11 @@ def eig(C):
 
                 # Generate Householder vector.
                 if not num_opt:
+                    h_add = [h]
                     for k in range(i):
                         d[k] /= scale
-                        h += d[k] * d[k]
+                        h_add.append(d[k] * d[k])
+                    h = fsum(h_add)
                 else:
                     d[:i] /= scale
                     h = np.dot(d[:i], d[:i])
@@ -1022,19 +1031,22 @@ def eig(C):
                     V[j][i] = f
                     g = e[j] + V[j][j] * f
                     if not num_opt:
+                        g_add = [g]
                         for k in range(j+1, i):
-                            g += V[k][j] * d[k]
+                            g_add.append(V[k][j] * d[k])
                             e[k] += V[k][j] * f
-                        e[j] = g
+                        e[j] = fsum(g_add)
                     else:
                         e[j+1:i] += V.T[j][j+1:i] * f
                         e[j] = g + np.dot(V.T[j][j+1:i], d[j+1:i])
 
                 f = 0.0
                 if not num_opt:
+                    f_add = [f]
                     for j in range(i):
                         e[j] /= h
-                        f += e[j] * d[j]
+                        f_add.append(e[j] * d[j])
+                    f = fsum(f_add)
                 else:
                     e[:i] /= h
                     f += np.dot(e[:i], d[:i])
@@ -1076,9 +1088,10 @@ def eig(C):
 
                 for j in range(i+1):
                     if not num_opt:
-                        g = 0.0
+                        g_add = []
                         for k in range(i+1):
-                            g += V[k][i+1] * V[k][j]
+                            g_add.append(V[k][i+1] * V[k][j])
+                        g = fsum(g_add)
                         for k in range(i+1):
                             V[k][j] -= g * d[k]
                     else:
@@ -1215,7 +1228,7 @@ def eig(C):
             e[l] = 0.0
 
         # Sort eigenvalues and corresponding vectors.
-        if 11 < 3:
+        if 11 < 3: # XXX
             for i in range(n-1):  # (int i = 0; i < n-1; i++) {
                 k = i
                 p = d[i]
