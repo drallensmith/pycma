@@ -1316,6 +1316,7 @@ def test():
         >>> assert es.result[1] < 1e13
         >>> print(es.result[2])
         9300
+
     """
     import doctest
     print('launching doctest...')
