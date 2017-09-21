@@ -1,5 +1,6 @@
 #!/usr/bin/env python
-"""A minimalistic implemention of CMA-ES without using `numpy`.
+"""
+A minimalistic implemention of CMA-ES without using `numpy`.
 
 The Covariance Matrix Adaptation Evolution Strategy, CMA-ES, serves for
 numerical nonlinear function minimization.
@@ -43,7 +44,6 @@ Last change: September, 2017, version 3.0.0
 
 This code is released into the public domain (that is, you may
 use and modify it however you like).
-
 """
 from __future__ import division  # such that 1/2 != 0
 from __future__ import print_function  # available since 2.6, not needed
@@ -416,7 +416,7 @@ class CMAES(OOOptimizer):  # could also inherit from object
                 / (1-(1-par.cs)**(2*self.counteval/par.lam)) / N
                 < 2 + 4./(N+1))
         for i in range(N):  # update evolution path pc
-            self.pc[i] = (1 - par.cc) * self.pc[i] + ccn * hsig * y[i] # possibly should not be done at all if hsig == 0?
+            self.pc[i] = (1 - par.cc) * self.pc[i] + ccn * hsig * y[i] # should this be done at all if hsig == 0?
 
         ### Adapt covariance matrix C
         # minor adjustment for the variance loss from hsig
@@ -856,7 +856,7 @@ class DecomposingPositiveMatrix(SquareMatrix):
         return self
 
 def eye(dimension):
-    """Return identity matrix as a `list` of `vectors` (lists themselves)"""
+    """Return identity matrix as `list` of "vectors" (lists themselves)"""
     m = [dimension * [0] for i in range(dimension)]
     # m = N * [N * [0]] fails because it gives N times the same reference
     for i in range(dimension):
@@ -865,7 +865,7 @@ def eye(dimension):
 
 def dot(A, b, transpose=False):
     """
-    Usual dot product of `matrix` A with `vector` b.
+    Usual dot product of "matrix" A with "vector" b.
     ``A[i]`` is the i-th row of A. With ``transpose=True``, transposed A
     is used.
     """
@@ -1273,7 +1273,7 @@ def eig(C):
 
 def test():
     """
-    Test of the `purecma` module, called via ``if __name__ == "__main__"``.
+    Test of the `purecma` module, called ``if __name__ == "__main__"``.
 
     Currently only based on `doctest`::
 
