@@ -48,7 +48,7 @@ use and modify it however you like).
 from __future__ import division  # such that 1/2 != 0
 from __future__ import print_function  # available since 2.6, not needed
 
-from sys import stdout as _stdout # not strictly necessary
+from sys import stdout # not strictly necessary
 from math import log, exp, fsum
 from random import normalvariate as random_normalvariate
 
@@ -348,7 +348,6 @@ class CMAES(OOOptimizer):  # could also inherit from object
     def ask(self):
         """
         Sample lambda candidate solutions
-
         distributed according to::
 
             m + sigma * Normal(0,C) = m + sigma * B * D * Normal(0,I)
@@ -439,10 +438,9 @@ class CMAES(OOOptimizer):  # could also inherit from object
 
     def stop(self):
         """
-        Return satisfied termination conditions in a dictionary,
-
-        generally speaking like ``{'termination_reason':value, ...}``;
-        for example ``{'tolfun':1e-12}``, or the empty `dict` ``{}``.
+        Return satisfied termination conditions (if any) in a dictionary,
+        in the format ``{'termination_reason':value, ...}``;
+        for example, ``{'tolfun':1e-12}``, or the empty `dict` ``{}``.
         """
         res = {}
         if self.counteval <= 0:
@@ -458,7 +456,7 @@ class CMAES(OOOptimizer):  # could also inherit from object
                 and self.fitvals[-1] - self.fitvals[0] < 1e-12:
             res['tolfun'] = 1e-12
         if self.sigma * max(self.C.eigenvalues)**0.5 < 1e-11:
-            # remark: max(D) >= max(diag(C))**0.5
+            # note: max(D) >= max(diag(C))**0.5
             res['tolx'] = 1e-11
         return res
 
@@ -491,13 +489,13 @@ class CMAES(OOOptimizer):  # could also inherit from object
                   ' %6.1f %8.1e  ' % (self.C.condition_number**0.5,
                                       self.sigma * max(self.C.diag)**0.5) +
                   str(self.fitvals[0]))
-            _stdout.flush() # is this where print will always be going - check!
+            stdout.flush()
 
 
 # -----------------------------------------------
 class CMAESDataLogger(_BaseDataLogger):  # could also inherit from object
     """
-    Data logger for class `CMAES`, that can record and plot data.
+    Data logger for class `CMAES`; can record and plot data.
 
     Examples
     ========
@@ -613,7 +611,7 @@ class CMAESDataLogger(_BaseDataLogger):  # could also inherit from object
         dat = self._data  # dictionary with entries as given in __init__
         if not dat:
             return
-        try:  # a hack to get the presumable population size lambda
+        try:  # a hack to get the presumed population size lambda
             strpopsize = ' (evaluations / %s)' % str(dat['eval'][-2] -
                                                      dat['eval'][-3])
         except IndexError:
@@ -747,6 +745,7 @@ class BestSolution(object):
             self.f = f
             self.evals = evals
         return self
+
     @property
     def all(self):
         """``(x, f, evals)`` of the best seen solution"""
@@ -761,7 +760,7 @@ class SquareMatrix(list):  # inheritance from numpy.ndarray is not recommended
             self[i][i] = 1
 
     def multiply_with(self, factor):
-        """Multiply matrix in place with `factor`"""
+        """Multiply matrix in place by `factor`"""
         for row in self:
             for j in range(len(row)):
                 row[j] *= factor
@@ -843,9 +842,8 @@ class DecomposingPositiveMatrix(SquareMatrix):
 
     def mahalanobis_norm(self, dx):
         """
-        Takes the distances dx and calculates a summed distance that
-        accounts for not only intravariable variance, but intervariable
-        covariance. Returns ``(dx^T * C^-1 * dx)**0.5``
+        Normalizes distance measures dx using estimated covariance
+        matrix. Returns ``(dx^T * C^-1 * dx)**0.5``
         """
         return fsum(xi**2 for xi in dot(self.invsqrt, dx))**0.5
 
@@ -866,8 +864,7 @@ def eye(dimension):
 def dot(A, b, transpose=False):
     """
     Usual dot product of "matrix" A with "vector" b.
-    ``A[i]`` is the i-th row of A. With ``transpose=True``, transposed A
-    is used.
+    ``A[i]`` is the i-th row of A. Uses transposed A if ``transpose=True``.
     """
     if not transpose:
         return [fsum(A[i][j] * b[j] for j in range(len(b)))
@@ -906,7 +903,6 @@ def safe_str(s, known_words=None):
         ' int ( 3.1 )'
         >>> safe_str('int(n)', {'int': 'int', 'n': 3.1})  # unexpected
         ' i 3.1 t ( 3.1 )'
-
     """
     safe_chars = ' 0123456789.,+-*()[]e'
     if s != str(s):
@@ -1154,42 +1150,42 @@ def eig(C):
         f = 0.0
         tst1 = 0.0
         eps = 2.0**-52.0
-        for el in range(n):  # (int el = 0; el < n; l++) {
+        for L in range(n):  # (int L = 0; L < n; L++) {
 
             # Find small subdiagonal element
 
-            tst1 = max(tst1, abs(d[el]) + abs(e[el]))
-            m = el
+            tst1 = max(tst1, abs(d[L]) + abs(e[L]))
+            m = L
             while m < n:
                 if abs(e[m]) <= eps*tst1:
                     break
                 m += 1
 
-            # If m == el, d[el] is an eigenvalue,
+            # If m == L, d[L] is an eigenvalue,
             # otherwise, iterate.
 
-            if m > el:
+            if m > L:
                 iiter = 0
                 while 1:  # do {
                     iiter += 1  # (Could check iteration count here.)
 
                     # Compute implicit shift
 
-                    g = d[el]
-                    p = (d[el+1] - g) / (2.0 * e[el])
+                    g = d[L]
+                    p = (d[L+1] - g) / (2.0 * e[L])
                     r = (p**2 + 1)**0.5  # hypot(p, 1.0)
                     if p < 0:
                         r = -r
 
-                    d[el] = e[el] / (p + r)
-                    d[el+1] = e[el] * (p + r)
-                    dl1 = d[el+1]
-                    h = g - d[el]
+                    d[L] = e[L] / (p + r)
+                    d[L+1] = e[L] * (p + r)
+                    dl1 = d[L+1]
+                    h = g - d[L]
                     if not num_opt:
-                        for i in range(el+2, n):
+                        for i in range(L+2, n):
                             d[i] -= h
                     else:
-                        d[el+2:n] -= h
+                        d[L+2:n] -= h
 
                     f += h
 
@@ -1199,13 +1195,13 @@ def eig(C):
                     c = 1.0
                     c2 = c
                     c3 = c
-                    el1 = e[el+1]
+                    el1 = e[L+1]
                     s = 0.0
                     s2 = 0.0
 
                     # hh = V.T[0].copy()  # only with num_opt
-                    for i in range(m-1, el-1, -1):
-                        # (int i = m-1; i >= el; i--) {
+                    for i in range(m-1, L-1, -1):
+                        # (int i = m-1; i >= L; i--) {
                         c3 = c2
                         c2 = c
                         s2 = s
@@ -1233,17 +1229,17 @@ def eig(C):
                             # V.T[i] *= c
                             # V.T[i] -= s * hh
 
-                    p = -s * s2 * c3 * el1 * e[el] / dl1
-                    e[el] = s * p
-                    d[el] = c * p
+                    p = -s * s2 * c3 * el1 * e[L] / dl1
+                    e[L] = s * p
+                    d[L] = c * p
 
                     # Check for convergence.
-                    if abs(e[el]) <= eps*tst1:
+                    if abs(e[L]) <= eps*tst1:
                         break
-                # } while (Math.abs(e[el]) > eps*tst1);
+                # } while (Math.abs(e[L]) > eps*tst1);
 
-            d[el] += f
-            e[el] = 0.0
+            d[L] += f
+            e[L] = 0.0
 
         # Sort eigenvalues and corresponding vectors.
         if 22 < 3: # if False - sorting of V-columns in place is non-trivial
